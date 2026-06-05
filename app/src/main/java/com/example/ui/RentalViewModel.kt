@@ -77,6 +77,7 @@ class RentalViewModel(application: Application) : AndroidViewModel(application) 
                 val listings = service.getListings(networkManager.adminToken)
                 _listingsState.value = UiState.Success(listings)
             } catch (e: Exception) {
+                e.printStackTrace()
                 _listingsState.value = UiState.Error(e, e.localizedMessage ?: "Erreur de chargement des annonces")
             }
         }
@@ -90,6 +91,7 @@ class RentalViewModel(application: Application) : AndroidViewModel(application) 
                 val bookings = service.getBookings(networkManager.adminToken)
                 _bookingsState.value = UiState.Success(bookings)
             } catch (e: Exception) {
+                e.printStackTrace()
                 _bookingsState.value = UiState.Error(e, e.localizedMessage ?: "Erreur de chargement des réservations")
             }
         }
@@ -103,6 +105,7 @@ class RentalViewModel(application: Application) : AndroidViewModel(application) 
                 val stats = service.getStats(networkManager.adminToken)
                 _statsState.value = UiState.Success(stats)
             } catch (e: Exception) {
+                e.printStackTrace()
                 _statsState.value = UiState.Error(e, e.localizedMessage ?: "Erreur de chargement des statistiques")
             }
         }

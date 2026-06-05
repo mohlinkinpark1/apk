@@ -1235,7 +1235,7 @@ fun ConnectionSettingsDialog(
                     color = BentoSlateDark
                 )
                 Text(
-                    text = "Configurez l'adresse IP / URL de votre backend web ainsi que la clé de sécurité admin pour vos communications privées.",
+                    text = "Configurez l'adresse URL de votre API. Si vous utilisez Render, n'oubliez pas d'ajouter '/api/' à la fin si nécessaire.",
                     fontSize = 12.sp,
                     color = BentoSlateText
                 )

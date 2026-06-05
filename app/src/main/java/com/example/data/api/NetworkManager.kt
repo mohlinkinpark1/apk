@@ -30,7 +30,13 @@ class NetworkManager(context: Context) {
             return url
         }
         set(value) {
-            val url = if (value.endsWith("/")) value else "$value/"
+            var url = value.trim()
+            if (!url.startsWith("http")) {
+                url = "https://$url"
+            }
+            if (!url.endsWith("/")) {
+                url += "/"
+            }
             sharedPrefs.edit().putString(KEY_BASE_URL, url).apply()
             rebuildService()
         }
