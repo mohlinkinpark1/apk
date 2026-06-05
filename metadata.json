@@ -1,0 +1,6 @@
+{
+  "name": "Rental Admin",
+  "description": "Tableau de bord d'administration pour la gestion des annonces de location, réservations et statistiques en temps réel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
