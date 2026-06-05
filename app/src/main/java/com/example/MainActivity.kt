@@ -744,7 +744,7 @@ fun ListingItemCard(
                 // Remote Image using Coil
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(listing.image)
+                        .data(listing.displayImage)
                         .crossfade(true)
                         .build(),
                     contentDescription = "Image de la villa",
@@ -787,7 +787,7 @@ fun ListingItemCard(
                         .align(Alignment.TopEnd)
                 ) {
                     Text(
-                        text = listing.type ?: "Villa",
+                        text = listing.displayType,
                         color = BentoIndigo,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold
@@ -840,7 +840,7 @@ fun ListingItemCard(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Capacité : ${listing.beds ?: 0} lits",
+                        text = "Capacité : ${listing.displayBeds} lits",
                         style = MaterialTheme.typography.bodySmall,
                         color = BentoSlateText
                     )
@@ -870,10 +870,10 @@ fun ListingItemCard(
                 ) {
                     Column {
                         Text(
-                            text = if (listing.isAvailable) "Disponible à la location" else "Masquée / Indisponible",
+                            text = if (listing.displayAvailable) "Disponible à la location" else "Masquée / Indisponible",
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Bold,
-                            color = if (listing.isAvailable) Color(0xFF10B981) else Color(0xFFEF4444)
+                            color = if (listing.displayAvailable) Color(0xFF10B981) else Color(0xFFEF4444)
                         )
                         Text(
                             text = "Statut en direct sur le web",
@@ -882,7 +882,7 @@ fun ListingItemCard(
                         )
                     }
                     Switch(
-                        checked = listing.isAvailable,
+                        checked = listing.displayAvailable,
                         onCheckedChange = { onAvailabilityChange() },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color.White,
@@ -1607,10 +1607,14 @@ fun CreateListingDialog(
                                     description = description,
                                     pricePerDay = price,
                                     image = imageUrl,
+                                    images = listOf(imageUrl),
                                     location = location,
                                     beds = beds,
+                                    capacity = beds,
                                     type = selectedType,
-                                    isAvailable = true
+                                    category = selectedType.lowercase().replace(" ", "_"),
+                                    isAvailable = true,
+                                    available = true
                                 )
                                 onCreate(item)
                             }

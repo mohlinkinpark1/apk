@@ -132,7 +132,10 @@ class RentalViewModel(application: Application) : AndroidViewModel(application) 
                 service.updateListing(
                     token = networkManager.adminToken,
                     id = id,
-                    fields = mapOf("isAvailable" to updatedAvailable)
+                    fields = mapOf(
+                        "isAvailable" to updatedAvailable,
+                        "available" to updatedAvailable
+                    )
                 )
                 _toastMessage.emit("Disponibilité de '${listing.title ?: ""}' mise à jour")
                 // Quick optimistic update or simple refetch
@@ -151,7 +154,10 @@ class RentalViewModel(application: Application) : AndroidViewModel(application) 
                 service.updateListing(
                     token = networkManager.adminToken,
                     id = id,
-                    fields = mapOf("pricePerDay" to newPrice)
+                    fields = mapOf(
+                        "pricePerDay" to newPrice,
+                        "price" to newPrice
+                    )
                 )
                 _toastMessage.emit("Prix de '${listing.title ?: ""}' mis à jour à $newPrice €")
                 refreshAll()
