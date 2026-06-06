@@ -112,6 +112,7 @@ import com.example.ui.UiState
 import com.example.ui.theme.MyApplicationTheme
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.InputStream
 import java.util.UUID
 
 // Palette design tokens matching the Bento HTML Theme Guidelines
@@ -1337,44 +1338,53 @@ fun createTempPictureUri(context: Context): Uri? {
 
 fun uriToBase64(context: Context, uri: Uri): String? {
     return try {
-        android.util.Log.d("ImageDEBUG", "Converting URI to Base64: $uri")
-        // First, get the dimensions
+        val contentResolver = context.contentResolver
+        
+        // Étape 1 : Obtenir uniquement les dimensions de l'image (sans charger en mémoire)
+        var inputStream: InputStream? = contentResolver.openInputStream(uri)
         val options = BitmapFactory.Options().apply {
             inJustDecodeBounds = true
         }
-        context.contentResolver.openInputStream(uri)?.use { 
-            BitmapFactory.decodeStream(it, null, options)
-        }
-        
-        android.util.Log.d("ImageDEBUG", "Original size: ${options.outWidth}x${options.outHeight}")
-        
-        // Calculate sample size
-        var scale = 1
-        val maxSize = 1000
-        while (options.outWidth / scale > maxSize || options.outHeight / scale > maxSize) {
-            scale *= 2
-        }
-        
-        android.util.Log.d("ImageDEBUG", "Scale factor: $scale")
-        
-        // Decode the scaled bitmap
-        val decodeOptions = BitmapFactory.Options().apply {
-            inSampleSize = scale
-        }
-        val bitmap = context.contentResolver.openInputStream(uri)?.use {
-            BitmapFactory.decodeStream(it, null, decodeOptions)
-        } ?: return null
+        BitmapFactory.decodeStream(inputStream, null, options)
+        inputStream?.close()
 
-        android.util.Log.d("ImageDEBUG", "Decoded size: ${bitmap.width}x${bitmap.height}")
+        // Étape 2 : Calculer le facteur de réduction d'échelle (Target max 1024px)
+        val reqWidth = 1024
+        val reqHeight = 1024
+        var inSampleSize = 1
+        if (options.outHeight > reqHeight || options.outWidth > reqWidth) {
+            val halfHeight = options.outHeight / 2
+            val halfWidth = options.outWidth / 2
+            while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
 
+        // Étape 3 : Charger l'image redimensionnée de manière sécurisée en mémoire
+        options.inJustDecodeBounds = false
+        options.inSampleSize = inSampleSize
+        
+        inputStream = contentResolver.openInputStream(uri)
+        val scaledBitmap = BitmapFactory.decodeStream(inputStream, null, options)
+        inputStream?.close()
+
+        if (scaledBitmap == null) return null
+
+        // Étape 4 : Compresser le Bitmap en JPEG léger (Qualité 80%)
         val outputStream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
-        val byteArray = outputStream.toByteArray()
-        val base64 = "data:image/jpeg;base64," + Base64.encodeToString(byteArray, Base64.NO_WRAP)
-        android.util.Log.d("ImageDEBUG", "Base64 created, length: ${base64.length}")
-        base64
+        scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
+        val imageBytes = outputStream.toByteArray()
+        
+        // Libérer la mémoire du bitmap natif immédiatement
+        scaledBitmap.recycle()
+
+        // Étape 5 : Encoder en chaîne Base64 propre
+        val base64Encoded = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
+        
+        // Retourner l'image enveloppée dans le format data URL standard supporté par la webapp
+        "data:image/jpeg;base64,$base64Encoded"
     } catch (e: Exception) {
-        android.util.Log.e("ImageDEBUG", "Error converting image", e)
+        e.printStackTrace()
         null
     }
 }
