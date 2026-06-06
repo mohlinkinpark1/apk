@@ -1,10 +1,14 @@
 package com.example
 
+import android.Manifest
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import android.util.Base64
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -13,6 +17,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.core.content.ContextCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -79,6 +84,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -141,9 +147,9 @@ fun MainAppScreen(viewModel: RentalViewModel) {
     val context = LocalContext.current
     
     // Tab states: 0 = Stats, 1 = Listings, 2 = Bookings
-    var currentTab by remember { mutableStateOf(0) }
-    var isSettingsOpen by remember { mutableStateOf(false) }
-    var isCreateListingOpen by remember { mutableStateOf(false) }
+    var currentTab by rememberSaveable { mutableStateOf(0) }
+    var isSettingsOpen by rememberSaveable { mutableStateOf(false) }
+    var isCreateListingOpen by rememberSaveable { mutableStateOf(false) }
     var isEditPriceOpenForListing by remember { mutableStateOf<Listing?>(null) }
 
     val baseUrl by viewModel.baseUrlState.collectAsState()
@@ -331,10 +337,12 @@ fun MainAppScreen(viewModel: RentalViewModel) {
     // Add Listing Dialog
     if (isCreateListingOpen) {
         CreateListingDialog(
+            viewModel = viewModel,
             onDismiss = { isCreateListingOpen = false },
             onCreate = { newListing ->
                 viewModel.createListing(newListing) { success ->
                     if (success) {
+                        viewModel.resetCreateForm()
                         isCreateListingOpen = false
                     }
                 }
@@ -746,6 +754,8 @@ fun ListingItemCard(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(listing.displayImage)
                         .crossfade(true)
+                        .placeholder(android.R.drawable.ic_menu_gallery)
+                        .error(android.R.drawable.ic_menu_report_image)
                         .build(),
                     contentDescription = "Image de la villa",
                     contentScale = ContentScale.Crop,
@@ -1026,11 +1036,19 @@ fun BookingItemCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Client : ${booking.customerName ?: "Utilisateur Anonyme"}",
+                        text = "Client : ${booking.clientName ?: "Utilisateur Anonyme"}",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = BentoSlateDark
                     )
+                    if (!booking.clientPhone.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Tél : ${booking.clientPhone}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray
+                        )
+                    }
                     Text(
                         text = "ID: ${booking.id?.take(8) ?: "N/A"}",
                         style = MaterialTheme.typography.labelSmall,
@@ -1304,64 +1322,147 @@ fun ConnectionSettingsDialog(
     }
 }
 
-fun createTempPictureUri(context: Context): Uri {
-    val tempFile = File.createTempFile("img_", ".jpg", context.externalCacheDir ?: context.cacheDir).apply {
-        deleteOnExit()
+fun createTempPictureUri(context: Context): Uri? {
+    return try {
+        val storageDir = context.cacheDir
+        val tempFile = File(storageDir, "capture_${System.currentTimeMillis()}.jpg")
+        if (tempFile.exists()) tempFile.delete()
+        tempFile.createNewFile()
+        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", tempFile)
+    } catch (e: Exception) {
+        android.util.Log.e("ImageDEBUG", "Error creating temp file", e)
+        null
     }
-    return FileProvider.getUriForFile(context, "com.aistudio.rentaladmin.xskydb.fileprovider", tempFile)
 }
 
 fun uriToBase64(context: Context, uri: Uri): String? {
     return try {
-        val inputStream = context.contentResolver.openInputStream(uri)
-        val bitmap = BitmapFactory.decodeStream(inputStream) ?: return null
+        android.util.Log.d("ImageDEBUG", "Converting URI to Base64: $uri")
+        // First, get the dimensions
+        val options = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        context.contentResolver.openInputStream(uri)?.use { 
+            BitmapFactory.decodeStream(it, null, options)
+        }
+        
+        android.util.Log.d("ImageDEBUG", "Original size: ${options.outWidth}x${options.outHeight}")
+        
+        // Calculate sample size
+        var scale = 1
+        val maxSize = 1000
+        while (options.outWidth / scale > maxSize || options.outHeight / scale > maxSize) {
+            scale *= 2
+        }
+        
+        android.util.Log.d("ImageDEBUG", "Scale factor: $scale")
+        
+        // Decode the scaled bitmap
+        val decodeOptions = BitmapFactory.Options().apply {
+            inSampleSize = scale
+        }
+        val bitmap = context.contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, decodeOptions)
+        } ?: return null
+
+        android.util.Log.d("ImageDEBUG", "Decoded size: ${bitmap.width}x${bitmap.height}")
+
         val outputStream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
         val byteArray = outputStream.toByteArray()
-        "data:image/jpeg;base64," + Base64.encodeToString(byteArray, Base64.NO_WRAP)
+        val base64 = "data:image/jpeg;base64," + Base64.encodeToString(byteArray, Base64.NO_WRAP)
+        android.util.Log.d("ImageDEBUG", "Base64 created, length: ${base64.length}")
+        base64
     } catch (e: Exception) {
-        e.printStackTrace()
+        android.util.Log.e("ImageDEBUG", "Error converting image", e)
         null
+    }
+}
+
+fun grantCameraPermission(context: Context, uri: Uri) {
+    try {
+        val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+        val resInfoList = context.packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+        android.util.Log.d("ImageDEBUG", "Granting permission to ${resInfoList.size} activities")
+        for (resolveInfo in resInfoList) {
+            val packageName = resolveInfo.activityInfo.packageName
+            context.grantUriPermission(packageName, uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+    } catch (e: Exception) {
+        android.util.Log.e("ImageDEBUG", "Error granting permission", e)
     }
 }
 
 // ➕ CREATE LISTING DIALOG
 @Composable
 fun CreateListingDialog(
+    viewModel: RentalViewModel,
     onDismiss: () -> Unit,
     onCreate: (Listing) -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var priceStr by remember { mutableStateOf("") }
-    var imageUrl by remember { mutableStateOf("") }
-    var location by remember { mutableStateOf("") }
-    var bedsStr by remember { mutableStateOf("") }
-    var selectedType by remember { mutableStateOf("Villa") }
+    val title by viewModel.createListingTitle.collectAsState()
+    val description by viewModel.createListingDescription.collectAsState()
+    val priceStr by viewModel.createListingPrice.collectAsState()
+    val imageUrl by viewModel.createListingImageUrl.collectAsState()
+    val location by viewModel.createListingLocation.collectAsState()
+    val bedsStr by viewModel.createListingBeds.collectAsState()
+    val selectedType by viewModel.createListingCategory.collectAsState()
 
     val context = LocalContext.current
+    val cameraUri by viewModel.cameraUri.collectAsState()
+
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { 
-            val base64 = uriToBase64(context, it)
-            if (base64 != null) {
-                imageUrl = base64
+            try {
+                val base64 = uriToBase64(context, it)
+                if (base64 != null) {
+                    viewModel.createListingImageUrl.value = base64
+                } else {
+                    Toast.makeText(context, "Erreur de traitement de l'image", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Erreur: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    var photoUri by remember { mutableStateOf<Uri?>(null) }
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
         if (success) { 
-            photoUri?.let {
-                val base64 = uriToBase64(context, it)
-                if (base64 != null) {
-                    imageUrl = base64
+            cameraUri?.let {
+                try {
+                    val base64 = uriToBase64(context, it)
+                    if (base64 != null) {
+                        viewModel.createListingImageUrl.value = base64
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Erreur traitement photo: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
                 }
             }
+        } else {
+            Toast.makeText(context, "Capture annulée ou échouée", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            val tempUri = createTempPictureUri(context)
+            if (tempUri != null) {
+                viewModel.setCameraUri(tempUri)
+                grantCameraPermission(context, tempUri)
+                try {
+                    cameraLauncher.launch(tempUri)
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Impossible de lancer la caméra: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } else {
+            Toast.makeText(context, "Permission caméra refusée", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1402,7 +1503,7 @@ fun CreateListingDialog(
 
                 OutlinedTextField(
                     value = title,
-                    onValueChange = { title = it },
+                    onValueChange = { viewModel.createListingTitle.value = it },
                     label = { Text("Titre de la location") },
                     singleLine = true,
                     modifier = Modifier
@@ -1412,7 +1513,7 @@ fun CreateListingDialog(
 
                 OutlinedTextField(
                     value = description,
-                    onValueChange = { description = it },
+                    onValueChange = { viewModel.createListingDescription.value = it },
                     label = { Text("Description détaillée") },
                     maxLines = 4,
                     modifier = Modifier
@@ -1426,7 +1527,7 @@ fun CreateListingDialog(
                 ) {
                     OutlinedTextField(
                         value = priceStr,
-                        onValueChange = { priceStr = it },
+                        onValueChange = { viewModel.createListingPrice.value = it },
                         label = { Text("Prix/jour (€)") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -1437,7 +1538,7 @@ fun CreateListingDialog(
 
                     OutlinedTextField(
                         value = bedsStr,
-                        onValueChange = { bedsStr = it },
+                        onValueChange = { viewModel.createListingBeds.value = it },
                         label = { Text("Nombre lits") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -1449,7 +1550,7 @@ fun CreateListingDialog(
 
                 OutlinedTextField(
                     value = location,
-                    onValueChange = { location = it },
+                    onValueChange = { viewModel.createListingLocation.value = it },
                     label = { Text("Emplacement (ex: Ghazaouet)") },
                     singleLine = true,
                     modifier = Modifier
@@ -1467,32 +1568,37 @@ fun CreateListingDialog(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     
-                    if (!imageUrl.isNullOrBlank()) {
+                    if (imageUrl.isNotBlank()) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(150.dp)
+                                .height(200.dp)
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(Color(0xFFF1F5F9))
                         ) {
                             AsyncImage(
-                                model = imageUrl,
+                                model = ImageRequest.Builder(LocalContext.current)
+                                    .data(imageUrl)
+                                    .crossfade(true)
+                                    .placeholder(android.R.drawable.ic_menu_gallery)
+                                    .error(android.R.drawable.ic_menu_report_image)
+                                    .build(),
                                 contentDescription = null,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop
                             )
                             IconButton(
-                                onClick = { imageUrl = "" },
+                                onClick = { viewModel.createListingImageUrl.value = "" },
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
                                     .padding(8.dp)
                                     .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                                    .size(24.dp)
+                                    .size(32.dp)
                             ) {
-                                Icon(Icons.Default.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                             }
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
                     }
 
                     Row(
@@ -1512,9 +1618,20 @@ fun CreateListingDialog(
 
                         OutlinedButton(
                             onClick = {
-                                val tempUri = createTempPictureUri(context)
-                                photoUri = tempUri
-                                cameraLauncher.launch(tempUri)
+                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                                    val tempUri = createTempPictureUri(context)
+                                    if (tempUri != null) {
+                                        viewModel.setCameraUri(tempUri)
+                                        grantCameraPermission(context, tempUri)
+                                        try {
+                                            cameraLauncher.launch(tempUri)
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Erreur caméra: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                } else {
+                                    permissionLauncher.launch(Manifest.permission.CAMERA)
+                                }
                             },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp),
@@ -1529,8 +1646,8 @@ fun CreateListingDialog(
                     // Optionnel: Garder un champ texte pour l'URL si besoin
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
-                        value = imageUrl ?: "",
-                        onValueChange = { imageUrl = it },
+                        value = imageUrl,
+                        onValueChange = { viewModel.createListingImageUrl.value = it },
                         label = { Text("Ou URL de l'image") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -1560,7 +1677,7 @@ fun CreateListingDialog(
                                         if (isSelected) BentoIndigo else Color(0xFFF1F5F9),
                                         RoundedCornerShape(8.dp)
                                     )
-                                    .clickable { selectedType = type }
+                                    .clickable { viewModel.createListingCategory.value = type }
                                     .padding(vertical = 8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -1597,11 +1714,18 @@ fun CreateListingDialog(
                     Button(
                         onClick = {
                             val price = priceStr.toDoubleOrNull()
-                            val beds = bedsStr.toIntOrNull()
-                            if (title.isBlank() || description.isBlank() || price == null || beds == null || location.isBlank() || imageUrl.isBlank()) {
+                            val beds = bedsStr.toIntOrNull() ?: 0
+                            if (title.isBlank() || description.isBlank() || price == null || location.isBlank() || imageUrl.isBlank()) {
                                 isError = true
                             } else {
                                 isError = false
+                                val categoryKey = when(selectedType) {
+                                    "Villa" -> "villas"
+                                    "Appartement" -> "appartements"
+                                    "Studio" -> "studios"
+                                    "Chambre d'hôte" -> "villas" // Fallback to villas
+                                    else -> "villas"
+                                }
                                 val item = Listing(
                                     title = title,
                                     description = description,
@@ -1612,7 +1736,7 @@ fun CreateListingDialog(
                                     beds = beds,
                                     capacity = beds,
                                     type = selectedType,
-                                    category = selectedType.lowercase().replace(" ", "_"),
+                                    category = categoryKey,
                                     isAvailable = true,
                                     available = true
                                 )
@@ -1896,7 +2020,7 @@ fun Greeting(name: String, modifier: Modifier = Modifier) {
 // Stats Tab Row custom helpers to hold live layout bindings or fallback demo bookings nicely formatted
 @Composable
 fun BentoBookingRow(booking: Booking) {
-    val customerInitials = booking.customerName?.split(" ")
+    val customerInitials = booking.clientName?.split(" ")
         ?.mapByNotNullForInitials()
         ?.joinToString("")?.take(2)?.uppercase() ?: "CL"
 

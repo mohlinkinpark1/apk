@@ -2,6 +2,7 @@ package com.example.ui
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.example.data.api.NetworkManager
 import com.example.data.model.Booking
@@ -21,7 +22,7 @@ sealed interface UiState<out T> {
     data class Error(val exception: Throwable, val message: String) : UiState<Nothing>
 }
 
-class RentalViewModel(application: Application) : AndroidViewModel(application) {
+class RentalViewModel(application: Application, private val savedStateHandle: SavedStateHandle) : AndroidViewModel(application) {
 
     private val networkManager = NetworkManager(application)
 
@@ -43,6 +44,44 @@ class RentalViewModel(application: Application) : AndroidViewModel(application) 
     // Real-time messages for operations (e.g. "Annonce supprimée", "Statut mis à jour")
     private val _toastMessage = MutableSharedFlow<String>()
     val toastMessage: SharedFlow<String> = _toastMessage.asSharedFlow()
+
+    // Temporary URI for camera capture to survive activity recreation
+    val cameraUri = savedStateHandle.getStateFlow<android.net.Uri?>("camera_uri", null)
+
+    fun setCameraUri(uri: android.net.Uri?) {
+        savedStateHandle["camera_uri"] = uri
+    }
+
+    // Form state for creating listing
+    val createListingTitle = savedStateHandle.getMutableStateFlow("create_title", "")
+    val createListingDescription = savedStateHandle.getMutableStateFlow("create_desc", "")
+    val createListingPrice = savedStateHandle.getMutableStateFlow("create_price", "")
+    val createListingImageUrl = savedStateHandle.getMutableStateFlow("create_image", "")
+    val createListingLocation = savedStateHandle.getMutableStateFlow("create_location", "")
+    val createListingBeds = savedStateHandle.getMutableStateFlow("create_beds", "")
+    val createListingCategory = savedStateHandle.getMutableStateFlow("create_category", "Villa")
+
+    private fun <T> SavedStateHandle.getMutableStateFlow(key: String, initialValue: T): MutableStateFlow<T> {
+        val liveData = getLiveData(key, initialValue)
+        val stateFlow = MutableStateFlow(liveData.value ?: initialValue)
+        
+        viewModelScope.launch {
+            stateFlow.collect { value ->
+                set(key, value)
+            }
+        }
+        return stateFlow
+    }
+
+    fun resetCreateForm() {
+        createListingTitle.value = ""
+        createListingDescription.value = ""
+        createListingPrice.value = ""
+        createListingImageUrl.value = ""
+        createListingLocation.value = ""
+        createListingBeds.value = ""
+        createListingCategory.value = "Villa"
+    }
 
     init {
         refreshAll()
@@ -128,7 +167,7 @@ class RentalViewModel(application: Application) : AndroidViewModel(application) 
 
     fun toggleListingAvailability(listing: Listing) {
         viewModelScope.launch {
-            val updatedAvailable = !listing.isAvailable
+            val updatedAvailable = !listing.displayAvailable
             try {
                 val service = networkManager.getService()
                 val id = listing.id ?: return@launch
@@ -201,7 +240,7 @@ class RentalViewModel(application: Application) : AndroidViewModel(application) 
                     "cancelled" -> "annulée"
                     else -> "mise en attente"
                 }
-                _toastMessage.emit("Réservation de ${booking.customerName ?: "Client"} $statusText !")
+                _toastMessage.emit("Réservation de ${booking.clientName ?: "Client"} $statusText !")
                 refreshAll()
             } catch (e: Exception) {
                 _toastMessage.emit("Erreur statut réservation : ${e.localizedMessage}")
