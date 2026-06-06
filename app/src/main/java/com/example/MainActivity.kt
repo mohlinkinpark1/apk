@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Base64
@@ -78,6 +79,8 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -92,6 +95,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -115,18 +124,24 @@ import java.io.File
 import java.io.InputStream
 import java.util.UUID
 
-// Palette design tokens matching the Bento HTML Theme Guidelines
-val BentoBg = Color(0xFFF7F9FC)
-val BentoIndigo = Color(0xFF4F46E5)
-val BentoIndigoLight = Color(0xFFEEF2FF)
-val BentoSlateDark = Color(0xFF0F172A)
-val BentoSlateText = Color(0xFF64748B)
-val BentoSlateLight = Color(0xFF94A3B8)
-val BentoOrange = Color(0xFFEA580C)
-val BentoOrangeLight = Color(0xFFFFF7ED)
-val BentoBlue = Color(0xFF2563EB)
-val BentoBlueLight = Color(0xFFEFF6FF)
-val BentoBorder = Color(0xFFE2E8F0)
+// Palette design tokens - VIP Premium Theme
+val VipGold = Color(0xFFD4AF37)
+val VipGoldLight = Color(0xFFF9F1D0)
+val VipBlack = Color(0xFF0F0F12)
+val VipSlate = Color(0xFF1C1C1E)
+val VipTextGold = Color(0xFFC5A028)
+val VipWhite = Color(0xFFFFFFFF)
+val BentoBg = Color(0xFF0A0A0A) // VIP Dark Background
+val BentoIndigo = Color(0xFF5856D6)
+val BentoIndigoLight = Color(0xFFE5E5EA)
+val BentoSlateDark = Color(0xFF1C1C1E)
+val BentoSlateText = Color(0xFF8E8E93)
+val BentoSlateLight = Color(0xFFC7C7CC)
+val BentoOrange = Color(0xFFFF9500)
+val BentoOrangeLight = Color(0xFFFFF2E0)
+val BentoBlue = Color(0xFF007AFF)
+val BentoBlueLight = Color(0xFFE5F1FF)
+val BentoBorder = Color(0xFFD1D1D6)
 
 class MainActivity : ComponentActivity() {
     private val viewModel: RentalViewModel by viewModels()
@@ -146,6 +161,25 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainAppScreen(viewModel: RentalViewModel) {
     val context = LocalContext.current
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
+    val pullToRefreshState = rememberPullToRefreshState()
+
+    // Notification permission request for Android 13+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (!isGranted) {
+            Toast.makeText(context, "Les notifications sont désactivées", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
     
     // Tab states: 0 = Stats, 1 = Listings, 2 = Bookings
     var currentTab by rememberSaveable { mutableStateOf(0) }
@@ -174,10 +208,10 @@ fun MainAppScreen(viewModel: RentalViewModel) {
                 title = {
                     Column {
                         Text(
-                            text = "Admin Console",
+                            text = "VIP Admin Console",
                             fontWeight = FontWeight.Black,
-                            fontSize = 22.sp,
-                            color = BentoSlateDark,
+                            fontSize = 24.sp,
+                            color = VipGold,
                             letterSpacing = (-1).sp
                         )
                         Row(
@@ -188,14 +222,14 @@ fun MainAppScreen(viewModel: RentalViewModel) {
                             Box(
                                 modifier = Modifier
                                     .size(8.dp)
-                                    .background(Color(0xFF22C55E), CircleShape)
+                                    .background(VipGold, CircleShape)
                             )
                             Text(
-                                text = "API CONNECTED",
+                                text = "PREMIUM ACCESS",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = BentoSlateText,
-                                letterSpacing = 0.5.sp
+                                color = VipGold.copy(alpha = 0.7f),
+                                letterSpacing = 1.sp
                             )
                         }
                     }
@@ -206,13 +240,13 @@ fun MainAppScreen(viewModel: RentalViewModel) {
                         modifier = Modifier
                             .padding(end = 4.dp)
                             .size(36.dp)
-                            .background(BentoIndigoLight, CircleShape)
+                            .background(VipSlate, CircleShape)
                             .testTag("refresh_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
-                            contentDescription = "Rafraîchir les données",
-                            tint = BentoIndigo,
+                            contentDescription = "Rafraîchir",
+                            tint = VipGold,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -221,21 +255,21 @@ fun MainAppScreen(viewModel: RentalViewModel) {
                         modifier = Modifier
                             .padding(end = 8.dp)
                             .size(36.dp)
-                            .background(BentoIndigoLight, CircleShape)
+                            .background(VipSlate, CircleShape)
                             .testTag("settings_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
-                            contentDescription = "Paramètres de connexion",
-                            tint = BentoIndigo,
+                            contentDescription = "Paramètres",
+                            tint = VipGold,
                             modifier = Modifier.size(18.dp)
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = BentoBg,
-                    titleContentColor = BentoSlateDark,
-                    actionIconContentColor = BentoIndigo
+                    titleContentColor = VipGold,
+                    actionIconContentColor = VipGold
                 )
             )
         },
@@ -243,21 +277,21 @@ fun MainAppScreen(viewModel: RentalViewModel) {
             NavigationBar(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
-                containerColor = Color.White,
-                tonalElevation = 8.dp
+                    .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)),
+                containerColor = VipBlack,
+                tonalElevation = 12.dp
             ) {
                 NavigationBarItem(
                     selected = currentTab == 0,
                     onClick = { currentTab = 0 },
-                    icon = { Icon(Icons.Default.Info, contentDescription = "Statistiques") },
+                    icon = { Icon(Icons.Default.Info, contentDescription = "Stats") },
                     label = { Text("Stats", fontWeight = FontWeight.Bold, fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = BentoIndigo,
+                        selectedIconColor = VipGold,
                         unselectedIconColor = BentoSlateLight,
-                        selectedTextColor = BentoSlateDark,
+                        selectedTextColor = VipGold,
                         unselectedTextColor = BentoSlateLight,
-                        indicatorColor = BentoIndigoLight
+                        indicatorColor = VipSlate
                     ),
                     modifier = Modifier.testTag("nav_tab_stats")
                 )
@@ -265,13 +299,13 @@ fun MainAppScreen(viewModel: RentalViewModel) {
                     selected = currentTab == 1,
                     onClick = { currentTab = 1 },
                     icon = { Icon(Icons.Default.Home, contentDescription = "Annonces") },
-                    label = { Text("Annonces", fontWeight = FontWeight.Bold, fontSize = 11.sp) },
+                    label = { Text("Biens", fontWeight = FontWeight.Bold, fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = BentoIndigo,
+                        selectedIconColor = VipGold,
                         unselectedIconColor = BentoSlateLight,
-                        selectedTextColor = BentoSlateDark,
+                        selectedTextColor = VipGold,
                         unselectedTextColor = BentoSlateLight,
-                        indicatorColor = BentoIndigoLight
+                        indicatorColor = VipSlate
                     ),
                     modifier = Modifier.testTag("nav_tab_listings")
                 )
@@ -281,11 +315,11 @@ fun MainAppScreen(viewModel: RentalViewModel) {
                     icon = { Icon(Icons.Default.DateRange, contentDescription = "Réservations") },
                     label = { Text("Réservations", fontWeight = FontWeight.Bold, fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = BentoIndigo,
+                        selectedIconColor = VipGold,
                         unselectedIconColor = BentoSlateLight,
-                        selectedTextColor = BentoSlateDark,
+                        selectedTextColor = VipGold,
                         unselectedTextColor = BentoSlateLight,
-                        indicatorColor = BentoIndigoLight
+                        indicatorColor = VipSlate
                     ),
                     modifier = Modifier.testTag("nav_tab_bookings")
                 )
@@ -295,29 +329,37 @@ fun MainAppScreen(viewModel: RentalViewModel) {
             if (currentTab == 1) {
                 FloatingActionButton(
                     onClick = { isCreateListingOpen = true },
-                    containerColor = BentoIndigo,
-                    contentColor = Color.White,
-                    shape = RoundedCornerShape(16.dp),
+                    containerColor = VipGold,
+                    contentColor = VipBlack,
+                    shape = CircleShape,
                     modifier = Modifier.testTag("add_listing_fab")
                 ) {
-                    Icon(imageVector = Icons.Default.Add, contentDescription = "Ajouter une annonce")
+                    Icon(imageVector = Icons.Default.Add, contentDescription = "Ajouter")
                 }
             }
         }
     ) { innerPadding ->
-        Box(
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { viewModel.refreshAll() },
+            state = pullToRefreshState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .background(BentoBg)
         ) {
-            when (currentTab) {
-                0 -> StatsTabContent(viewModel = viewModel, onNavigateToBookings = { currentTab = 2 })
-                1 -> ListingsTabContent(
-                    viewModel = viewModel,
-                    onEditPriceUrl = { isEditPriceOpenForListing = it }
-                )
-                2 -> BookingsTabContent(viewModel = viewModel)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(BentoBg)
+            ) {
+                when (currentTab) {
+                    0 -> StatsTabContent(viewModel = viewModel, onNavigateToBookings = { currentTab = 2 })
+                    1 -> ListingsTabContent(
+                        viewModel = viewModel,
+                        onEditPriceUrl = { isEditPriceOpenForListing = it }
+                    )
+                    2 -> BookingsTabContent(viewModel = viewModel)
+                }
             }
         }
     }
@@ -398,29 +440,37 @@ fun StatsTabContent(viewModel: RentalViewModel, onNavigateToBookings: () -> Unit
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     
-                    // 1. REVENUE CARD (Huge highlight bento container - indigo themed)
+                    // 1. REVENUE CARD (VIP Gold highlighted card)
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(32.dp),
-                        colors = CardDefaults.cardColors(containerColor = BentoIndigo)
+                        colors = CardDefaults.cardColors(containerColor = VipBlack),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, VipGold)
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(24.dp)
                         ) {
-                            Text(
-                                text = "Global Revenue",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color.White.copy(alpha = 0.8f)
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Total Revenues",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = VipGold.copy(alpha = 0.8f)
+                                )
+                                Icon(Icons.Default.Star, contentDescription = null, tint = VipGold, modifier = Modifier.size(16.dp))
+                            }
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = String.format("€%,.2f", stats.displayRevenue),
-                                fontSize = 36.sp,
+                                text = String.format("%,.2f DA", stats.displayRevenue),
+                                fontSize = 34.sp,
                                 fontWeight = FontWeight.Black,
-                                color = Color.White,
+                                color = VipGold,
                                 letterSpacing = (-1).sp
                             )
                             Spacer(modifier = Modifier.height(16.dp))
@@ -431,13 +481,13 @@ fun StatsTabContent(viewModel: RentalViewModel, onNavigateToBookings: () -> Unit
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .background(Color.White.copy(alpha = 0.18f), CircleShape)
+                                        .background(VipGold.copy(alpha = 0.15f), CircleShape)
                                         .padding(horizontal = 12.dp, vertical = 6.dp)
                                 ) {
                                     Text(
-                                        text = "+12% this month",
-                                        color = Color.White,
-                                        fontSize = 11.sp,
+                                        text = "VIP STATUS ACTIVE",
+                                        color = VipGold,
+                                        fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
@@ -447,10 +497,10 @@ fun StatsTabContent(viewModel: RentalViewModel, onNavigateToBookings: () -> Unit
                                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                                     verticalAlignment = Alignment.Bottom
                                 ) {
-                                    Box(modifier = Modifier.size(4.dp, 12.dp).background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(2.dp)))
-                                    Box(modifier = Modifier.size(4.dp, 20.dp).background(Color.White.copy(alpha = 0.4f), RoundedCornerShape(2.dp)))
-                                    Box(modifier = Modifier.size(4.dp, 28.dp).background(Color.White.copy(alpha = 0.6f), RoundedCornerShape(2.dp)))
-                                    Box(modifier = Modifier.size(4.dp, 36.dp).background(Color.White, RoundedCornerShape(2.dp)))
+                                    Box(modifier = Modifier.size(4.dp, 12.dp).background(VipGold.copy(alpha = 0.2f), RoundedCornerShape(2.dp)))
+                                    Box(modifier = Modifier.size(4.dp, 20.dp).background(VipGold.copy(alpha = 0.4f), RoundedCornerShape(2.dp)))
+                                    Box(modifier = Modifier.size(4.dp, 28.dp).background(VipGold.copy(alpha = 0.6f), RoundedCornerShape(2.dp)))
+                                    Box(modifier = Modifier.size(4.dp, 36.dp).background(VipGold, RoundedCornerShape(2.dp)))
                                 }
                             }
                         }
@@ -465,8 +515,8 @@ fun StatsTabContent(viewModel: RentalViewModel, onNavigateToBookings: () -> Unit
                         Card(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(28.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, BentoBorder)
+                            colors = CardDefaults.cardColors(containerColor = VipSlate),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, VipGold.copy(alpha = 0.2f))
                         ) {
                             Column(
                                 modifier = Modifier
@@ -478,10 +528,10 @@ fun StatsTabContent(viewModel: RentalViewModel, onNavigateToBookings: () -> Unit
                                 Box(
                                     modifier = Modifier
                                         .size(42.dp)
-                                        .background(BentoOrangeLight, RoundedCornerShape(14.dp)),
+                                        .background(VipGold.copy(alpha = 0.1f), RoundedCornerShape(14.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text("🏠", fontSize = 20.sp)
+                                    Icon(Icons.Default.Home, contentDescription = null, tint = VipGold, modifier = Modifier.size(22.dp))
                                 }
                                 Column {
                                     Text(
@@ -496,7 +546,7 @@ fun StatsTabContent(viewModel: RentalViewModel, onNavigateToBookings: () -> Unit
                                         text = stats.displayListingsCount.toString(),
                                         fontSize = 28.sp,
                                         fontWeight = FontWeight.Black,
-                                        color = BentoSlateDark
+                                        color = VipGold
                                     )
                                 }
                             }
@@ -506,8 +556,8 @@ fun StatsTabContent(viewModel: RentalViewModel, onNavigateToBookings: () -> Unit
                         Card(
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(28.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, BentoBorder)
+                            colors = CardDefaults.cardColors(containerColor = VipSlate),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, VipGold.copy(alpha = 0.2f))
                         ) {
                             Column(
                                 modifier = Modifier
@@ -519,14 +569,14 @@ fun StatsTabContent(viewModel: RentalViewModel, onNavigateToBookings: () -> Unit
                                 Box(
                                     modifier = Modifier
                                         .size(42.dp)
-                                        .background(BentoBlueLight, RoundedCornerShape(14.dp)),
+                                        .background(VipGold.copy(alpha = 0.1f), RoundedCornerShape(14.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text("📅", fontSize = 20.sp)
+                                    Icon(Icons.Default.DateRange, contentDescription = null, tint = VipGold, modifier = Modifier.size(22.dp))
                                 }
                                 Column {
                                     Text(
-                                        text = "OCCUPANCY",
+                                        text = "ACTIVE",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = BentoSlateLight,
@@ -534,10 +584,10 @@ fun StatsTabContent(viewModel: RentalViewModel, onNavigateToBookings: () -> Unit
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = String.format("%.0f%%", stats.displayOccupancy),
+                                        text = stats.bookingsCount.toString(),
                                         fontSize = 28.sp,
                                         fontWeight = FontWeight.Black,
-                                        color = BentoSlateDark
+                                        color = VipGold
                                     )
                                 }
                             }
@@ -548,7 +598,8 @@ fun StatsTabContent(viewModel: RentalViewModel, onNavigateToBookings: () -> Unit
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(28.dp),
-                        colors = CardDefaults.cardColors(containerColor = BentoSlateDark)
+                        colors = CardDefaults.cardColors(containerColor = VipSlate),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, VipGold.copy(alpha = 0.3f))
                     ) {
                         Column(modifier = Modifier.padding(20.dp)) {
                             Row(
@@ -561,19 +612,19 @@ fun StatsTabContent(viewModel: RentalViewModel, onNavigateToBookings: () -> Unit
                                         text = "Recent Bookings",
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color.White
+                                        color = VipGold
                                     )
                                     Text(
-                                        text = "Activity logs",
+                                        text = "VIP Activity Logs",
                                         fontSize = 11.sp,
-                                        color = BentoSlateLight
+                                        color = VipGold.copy(alpha = 0.5f)
                                     )
                                 }
                                 Text(
                                     text = "View All",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF818CF8),
+                                    color = VipGold,
                                     modifier = Modifier
                                         .clickable { onNavigateToBookings() }
                                         .padding(4.dp)
@@ -601,12 +652,6 @@ fun StatsTabContent(viewModel: RentalViewModel, onNavigateToBookings: () -> Unit
                                         period = "July 12 - July 15",
                                         status = "pending"
                                     )
-                                    BentoDemoBookingRow(
-                                        initials = "MS",
-                                        title = "Ocean Suite",
-                                        period = "July 10 - July 12",
-                                        status = "confirmed"
-                                    )
                                 }
                             }
                         }
@@ -616,8 +661,8 @@ fun StatsTabContent(viewModel: RentalViewModel, onNavigateToBookings: () -> Unit
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, BentoBorder)
+                        colors = CardDefaults.cardColors(containerColor = VipSlate),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, VipGold.copy(alpha = 0.1f))
                     ) {
                         Row(
                             modifier = Modifier
@@ -629,27 +674,27 @@ fun StatsTabContent(viewModel: RentalViewModel, onNavigateToBookings: () -> Unit
                             Box(
                                 modifier = Modifier
                                     .size(44.dp)
-                                    .background(BentoIndigoLight, RoundedCornerShape(12.dp)),
+                                    .background(VipBlack, RoundedCornerShape(12.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Info,
                                     contentDescription = null,
-                                    tint = BentoIndigo,
+                                    tint = VipGold,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
                             Column {
                                 Text(
-                                    text = "Système en direct",
+                                    text = "VIP System Status",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = BentoSlateDark
+                                    color = VipWhite
                                 )
                                 Text(
-                                    text = "Pour rafraîchir manuellement, utilisez le bouton de synchronisation en haut.",
+                                    text = "Pour rafraîchir manuellement, utilisez le bouton VIP en haut ou tirez vers le bas.",
                                     fontSize = 11.sp,
-                                    color = BentoSlateText,
+                                    color = BentoSlateLight,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -739,7 +784,7 @@ fun ListingItemCard(
             .padding(horizontal = 16.dp)
             .testTag("listing_card_${listing.id ?: "new"}"),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = VipWhite),
         border = androidx.compose.foundation.BorderStroke(1.dp, BentoBorder)
     ) {
         Column {
@@ -747,13 +792,13 @@ fun ListingItemCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp)
-                    .background(Color(0xFFF1F5F9))
+                    .height(220.dp)
+                    .background(VipSlate)
             ) {
                 // Remote Image using Coil
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(listing.displayImage)
+                        .data(decodeImageModel(listing.displayImage))
                         .crossfade(true)
                         .placeholder(android.R.drawable.ic_menu_gallery)
                         .error(android.R.drawable.ic_menu_report_image)
@@ -768,7 +813,7 @@ fun ListingItemCard(
                 Box(
                     modifier = Modifier
                         .padding(12.dp)
-                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                        .background(VipBlack.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
                         .padding(horizontal = 10.dp, vertical = 6.dp)
                         .align(Alignment.TopStart)
                 ) {
@@ -776,13 +821,13 @@ fun ListingItemCard(
                         Icon(
                             imageVector = Icons.Default.LocationOn,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = VipGold,
                             modifier = Modifier.size(12.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = listing.location ?: "",
-                            color = Color.White,
+                            color = VipWhite,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -793,15 +838,15 @@ fun ListingItemCard(
                 Box(
                     modifier = Modifier
                         .padding(12.dp)
-                        .background(BentoIndigoLight, RoundedCornerShape(10.dp))
+                        .background(VipGold, RoundedCornerShape(10.dp))
                         .padding(horizontal = 10.dp, vertical = 6.dp)
                         .align(Alignment.TopEnd)
                 ) {
                     Text(
-                        text = listing.displayType,
-                        color = BentoIndigo,
+                        text = listing.displayType.uppercase(),
+                        color = VipBlack,
                         fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.ExtraBold
                     )
                 }
 
@@ -809,21 +854,21 @@ fun ListingItemCard(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(80.dp)
+                        .height(100.dp)
                         .align(Alignment.BottomCenter)
                         .background(
                             Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f))
+                                colors = listOf(Color.Transparent, VipBlack.copy(alpha = 0.8f))
                             )
                         )
                 )
 
                 // Price display in overlay
                 Text(
-                    text = "${(listing.pricePerDay ?: 0.0).toInt()} € / jour",
-                    color = Color.White,
+                    text = "${(listing.pricePerDay ?: 0.0).toInt()} DA / JOUR",
+                    color = VipGold,
                     fontWeight = FontWeight.Black,
-                    fontSize = 18.sp,
+                    fontSize = 20.sp,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(12.dp)
@@ -834,60 +879,60 @@ fun ListingItemCard(
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
                     text = listing.title ?: "",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = BentoSlateDark,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = VipBlack,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Default.Home,
                         contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = BentoSlateText
+                        modifier = Modifier.size(16.dp),
+                        tint = VipTextGold
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "Capacité : ${listing.displayBeds} lits",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = BentoSlateText
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = BentoSlateText,
+                        fontWeight = FontWeight.Medium
                     )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = listing.description ?: "",
                     style = MaterialTheme.typography.bodyMedium,
                     color = BentoSlateText,
-                    maxLines = 2,
+                    maxLines = 3,
+                    lineHeight = 20.sp,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
                 // Availability toggle row
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(
-                            Color(0xFFF8FAFC),
-                            RoundedCornerShape(14.dp)
-                        )
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                        .background(VipGoldLight.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
                         Text(
-                            text = if (listing.displayAvailable) "Disponible à la location" else "Masquée / Indisponible",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (listing.displayAvailable) Color(0xFF10B981) else Color(0xFFEF4444)
+                            text = if (listing.displayAvailable) "DISPONIBLE" else "MASQUÉE",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Black,
+                            color = if (listing.displayAvailable) Color(0xFF15803D) else Color(0xFFB91C1C),
+                            letterSpacing = 1.sp
                         )
                         Text(
-                            text = "Statut en direct sur le web",
+                            text = "Statut Premium en direct",
                             style = MaterialTheme.typography.labelSmall,
                             color = BentoSlateLight
                         )
@@ -896,60 +941,50 @@ fun ListingItemCard(
                         checked = listing.displayAvailable,
                         onCheckedChange = { onAvailabilityChange() },
                         colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = BentoIndigo,
+                            checkedThumbColor = VipWhite,
+                            checkedTrackColor = VipGold,
                             uncheckedThumbColor = BentoSlateLight,
-                            uncheckedTrackColor = BentoBorder
+                            uncheckedTrackColor = BentoIndigoLight
                         ),
                         modifier = Modifier.testTag("availability_switch_${listing.id ?: ""}")
                     )
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // Action Buttons Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     OutlinedButton(
                         onClick = onEditPrice,
                         modifier = Modifier
                             .weight(1f)
+                            .height(48.dp)
                             .testTag("edit_price_btn_${listing.id ?: ""}"),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = BentoSlateDark
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, BentoBorder)
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = VipBlack),
+                        border = androidx.compose.foundation.BorderStroke(1.5.dp, VipGold)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Modifier prix", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp), tint = VipGold)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("PRIX", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
 
                     Button(
                         onClick = { showDeleteConfirm = true },
                         modifier = Modifier
                             .weight(1f)
+                            .height(48.dp)
                             .testTag("delete_btn_${listing.id ?: ""}"),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFFEE2E2),
-                            contentColor = Color(0xFFEF4444)
-                        )
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = VipBlack, contentColor = VipGold),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, VipGold.copy(alpha = 0.5f))
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Supprimer", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("SUPPRIMER", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1025,7 +1060,7 @@ fun BookingItemCard(
             .padding(horizontal = 16.dp)
             .testTag("booking_card_${booking.id ?: "new"}"),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = VipWhite),
         border = androidx.compose.foundation.BorderStroke(1.dp, BentoBorder)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -1036,183 +1071,148 @@ fun BookingItemCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Client : ${booking.clientName ?: "Utilisateur Anonyme"}",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = BentoSlateDark
-                    )
-                    if (!booking.clientPhone.isNullOrBlank()) {
-                        Spacer(modifier = Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(VipGoldLight, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = booking.clientName?.firstOrNull()?.toString()?.uppercase() ?: "C",
+                                color = VipTextGold,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Tél : ${booking.clientPhone}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray
+                            text = booking.clientName ?: "Anonyme",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = VipBlack
                         )
                     }
-                    Text(
-                        text = "ID: ${booking.id?.take(8) ?: "N/A"}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = BentoSlateLight
-                    )
+                    if (!booking.clientPhone.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(14.dp), tint = VipTextGold)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = booking.clientPhone,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = VipBlack.copy(alpha = 0.7f),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
                 Box(
                     modifier = Modifier
                         .background(statusBg, RoundedCornerShape(12.dp))
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = statusText,
+                        text = statusText.uppercase(),
                         color = statusColor,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Black
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Listing title
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFFF8FAFC)
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Home,
-                        contentDescription = null,
-                        tint = BentoIndigo,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = booking.listingTitle ?: "Villa non répertoriée",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = BentoSlateDark
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Booking Details Layout
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                // Dates Column
-                Column {
-                    Text(
-                        text = "Période de séjour",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = BentoSlateLight
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.DateRange,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = BentoSlateText
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "${booking.startDate} au ${booking.endDate}",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = BentoSlateDark
-                        )
-                    }
-                }
-
-                // Balance due Column
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "Montant Total",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = BentoSlateLight
-                    )
-                    Text(
-                        text = String.format("%.2f €", booking.totalPrice ?: 0.0),
-                        style = MaterialTheme.typography.titleMedium,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Black,
-                        color = BentoIndigo
+                        letterSpacing = 0.5.sp
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Actions panel for booking status change
-            Column {
-                Text(
-                    text = "Gérer la réservation :",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = BentoSlateText,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
+            // Listing title
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = VipBlack),
+                shape = RoundedCornerShape(14.dp)
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (currentStatus != "confirmed") {
-                        Button(
-                            onClick = { onStatusUpdate("confirmed") },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("confirm_booking_btn_${booking.id ?: ""}"),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = BentoIndigo,
-                                contentColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Confirmer", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
+                    Icon(Icons.Default.Home, contentDescription = null, tint = VipGold, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = booking.listingTitle ?: "Propriété VIP",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = VipGold
+                    )
+                }
+            }
 
-                    if (currentStatus != "cancelled") {
-                        Button(
-                            onClick = { onStatusUpdate("cancelled") },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("cancel_booking_btn_${booking.id ?: ""}"),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFFEE2E2),
-                                contentColor = Color(0xFFEF4444)
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Annuler", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
+            Spacer(modifier = Modifier.height(16.dp))
 
-                    if (currentStatus != "pending" && currentStatus == "cancelled") {
-                        OutlinedButton(
-                            onClick = { onStatusUpdate("pending") },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("pending_booking_btn_${booking.id ?: ""}"),
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, BentoBorder),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = BentoSlateDark
-                            )
-                        ) {
-                            Text("Rétablir", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
+            // Booking Details Layout
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Dates Column
+                Column {
+                    Text(
+                        text = "SÉJOUR",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = BentoSlateLight,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "${booking.startDate} ➔ ${booking.endDate}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = VipBlack
+                    )
+                }
+
+                // Balance due Column
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "TOTAL",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = BentoSlateLight,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = String.format("%,.0f DA", booking.totalPrice ?: 0.0),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                        color = VipBlack
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Actions panel
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                if (currentStatus != "confirmed") {
+                    Button(
+                        onClick = { onStatusUpdate("confirmed") },
+                        modifier = Modifier.weight(1f).height(44.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = VipGold, contentColor = VipBlack),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("CONFIRMER", fontSize = 11.sp, fontWeight = FontWeight.Black)
+                    }
+                }
+
+                if (currentStatus != "cancelled") {
+                    OutlinedButton(
+                        onClick = { onStatusUpdate("cancelled") },
+                        modifier = Modifier.weight(1f).height(44.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFB91C1C)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFB91C1C)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("ANNULER", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1338,53 +1338,44 @@ fun createTempPictureUri(context: Context): Uri? {
 
 fun uriToBase64(context: Context, uri: Uri): String? {
     return try {
-        val contentResolver = context.contentResolver
-        
-        // Étape 1 : Obtenir uniquement les dimensions de l'image (sans charger en mémoire)
-        var inputStream: InputStream? = contentResolver.openInputStream(uri)
+        // Étape 1 : Obtenir uniquement les dimensions de l'image
         val options = BitmapFactory.Options().apply {
             inJustDecodeBounds = true
         }
-        BitmapFactory.decodeStream(inputStream, null, options)
-        inputStream?.close()
+        context.contentResolver.openInputStream(uri)?.use { 
+            BitmapFactory.decodeStream(it, null, options)
+        }
 
-        // Étape 2 : Calculer le facteur de réduction d'échelle (Target max 1024px)
-        val reqWidth = 1024
-        val reqHeight = 1024
+        // Étape 2 : Calculer le facteur de réduction d'échelle (Target max 800px)
+        val reqSize = 800
         var inSampleSize = 1
-        if (options.outHeight > reqHeight || options.outWidth > reqWidth) {
+        if (options.outHeight > reqSize || options.outWidth > reqSize) {
             val halfHeight = options.outHeight / 2
             val halfWidth = options.outWidth / 2
-            while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
+            while ((halfHeight / inSampleSize) >= reqSize && (halfWidth / inSampleSize) >= reqSize) {
                 inSampleSize *= 2
             }
         }
 
-        // Étape 3 : Charger l'image redimensionnée de manière sécurisée en mémoire
+        // Étape 3 : Charger l'image redimensionnée
         options.inJustDecodeBounds = false
         options.inSampleSize = inSampleSize
         
-        inputStream = contentResolver.openInputStream(uri)
-        val scaledBitmap = BitmapFactory.decodeStream(inputStream, null, options)
-        inputStream?.close()
+        val bitmap = context.contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, options)
+        } ?: return null
 
-        if (scaledBitmap == null) return null
-
-        // Étape 4 : Compresser le Bitmap en JPEG léger (Qualité 80%)
+        // Étape 4 : Compresser en JPEG
         val outputStream = ByteArrayOutputStream()
-        scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 75, outputStream)
         val imageBytes = outputStream.toByteArray()
-        
-        // Libérer la mémoire du bitmap natif immédiatement
-        scaledBitmap.recycle()
+        bitmap.recycle()
 
-        // Étape 5 : Encoder en chaîne Base64 propre
+        // Étape 5 : Encoder en Base64
         val base64Encoded = Base64.encodeToString(imageBytes, Base64.NO_WRAP)
-        
-        // Retourner l'image enveloppée dans le format data URL standard supporté par la webapp
         "data:image/jpeg;base64,$base64Encoded"
     } catch (e: Exception) {
-        e.printStackTrace()
+        android.util.Log.e("ImageDEBUG", "Error converting image", e)
         null
     }
 }
@@ -1401,6 +1392,18 @@ fun grantCameraPermission(context: Context, uri: Uri) {
     } catch (e: Exception) {
         android.util.Log.e("ImageDEBUG", "Error granting permission", e)
     }
+}
+
+fun decodeImageModel(model: Any?): Any? {
+    if (model is String && model.startsWith("data:image")) {
+        return try {
+            val base64String = model.substringAfter(",")
+            Base64.decode(base64String, Base64.NO_WRAP)
+        } catch (e: Exception) {
+            null
+        }
+    }
+    return model
 }
 
 // ➕ CREATE LISTING DIALOG
@@ -1588,7 +1591,7 @@ fun CreateListingDialog(
                         ) {
                             AsyncImage(
                                 model = ImageRequest.Builder(LocalContext.current)
-                                    .data(imageUrl)
+                                    .data(decodeImageModel(imageUrl))
                                     .crossfade(true)
                                     .placeholder(android.R.drawable.ic_menu_gallery)
                                     .error(android.R.drawable.ic_menu_report_image)
@@ -1924,7 +1927,7 @@ fun DeleteConfirmDialog(
                     }
 
                     Button(
-                        onClick = onConfirm,
+                        onClick = { onConfirm() },
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .weight(1f)
@@ -1955,37 +1958,36 @@ fun ErrorView(message: String, onRetry: () -> Unit) {
         Icon(
             imageVector = Icons.Default.Warning,
             contentDescription = null,
-            tint = Color(0xFFEF4444),
-            modifier = Modifier.size(48.dp)
+            tint = Color(0xFFB91C1C),
+            modifier = Modifier.size(60.dp)
         )
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(20.dp))
         Text(
-            text = "Oups ! Une erreur est survenue",
-            fontSize = 16.sp,
+            text = "Erreur Système VIP",
+            fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
-            color = BentoSlateDark
+            color = VipWhite
         )
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = message,
-            fontSize = 12.sp,
-            color = BentoSlateText,
+            fontSize = 13.sp,
+            color = BentoSlateLight,
             modifier = Modifier.padding(horizontal = 16.dp),
+            textAlign = TextAlign.Center,
             maxLines = 4,
             overflow = TextOverflow.Ellipsis
         )
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(32.dp))
         Button(
             onClick = onRetry,
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = BentoIndigo
-            ),
-            modifier = Modifier.testTag("retry_button")
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = VipGold, contentColor = VipBlack),
+            modifier = Modifier.testTag("retry_button").height(48.dp).fillMaxWidth(0.6f)
         ) {
-            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("Réessayer", fontWeight = FontWeight.Bold)
+            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("RÉESSAYER", fontWeight = FontWeight.ExtraBold)
         }
     }
 }
@@ -2002,22 +2004,24 @@ fun EmptyStateView(message: String, subtitle: String) {
         Icon(
             imageVector = Icons.Default.Info,
             contentDescription = null,
-            tint = BentoSlateLight,
-            modifier = Modifier.size(64.dp)
+            tint = VipGold.copy(alpha = 0.4f),
+            modifier = Modifier.size(80.dp)
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(24.dp))
         Text(
             text = message,
-            fontSize = 16.sp,
+            fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
-            color = BentoSlateDark
+            color = VipWhite,
+            textAlign = TextAlign.Center
         )
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = subtitle,
-            fontSize = 12.sp,
-            color = BentoSlateText,
-            modifier = Modifier.padding(horizontal = 8.dp)
+            fontSize = 13.sp,
+            color = BentoSlateLight,
+            modifier = Modifier.padding(horizontal = 8.dp),
+            textAlign = TextAlign.Center
         )
     }
 }
@@ -2044,7 +2048,7 @@ fun BentoBookingRow(booking: Booking) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(20.dp))
+            .background(VipSlate, RoundedCornerShape(20.dp))
             .padding(12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -2056,22 +2060,22 @@ fun BentoBookingRow(booking: Booking) {
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp)),
+                    .background(VipGold.copy(alpha = 0.1f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = customerInitials,
-                    color = Color.White,
+                    color = VipGold,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
             Column(modifier = Modifier.weight(1f, fill = false)) {
                 Text(
-                    text = booking.listingTitle ?: "Villa non répertoriée",
+                    text = booking.listingTitle ?: "Propriété VIP",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    color = VipWhite,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -2089,7 +2093,7 @@ fun BentoBookingRow(booking: Booking) {
                 .padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Text(
-                text = badgeText,
+                text = badgeText.uppercase(),
                 color = badgeColor,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Black
@@ -2114,7 +2118,7 @@ fun BentoDemoBookingRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(20.dp))
+            .background(VipSlate, RoundedCornerShape(20.dp))
             .padding(12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -2126,12 +2130,12 @@ fun BentoDemoBookingRow(
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp)),
+                    .background(VipGold.copy(alpha = 0.1f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = initials,
-                    color = Color.White,
+                    color = VipGold,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -2141,7 +2145,7 @@ fun BentoDemoBookingRow(
                     text = title,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = VipWhite
                 )
                 Text(
                     text = period,
@@ -2157,7 +2161,7 @@ fun BentoDemoBookingRow(
                 .padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Text(
-                text = badgeText,
+                text = badgeText.uppercase(),
                 color = badgeColor,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Black

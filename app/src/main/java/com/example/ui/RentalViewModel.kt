@@ -45,6 +45,9 @@ class RentalViewModel(application: Application, private val savedStateHandle: Sa
     private val _toastMessage = MutableSharedFlow<String>()
     val toastMessage: SharedFlow<String> = _toastMessage.asSharedFlow()
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
     // Temporary URI for camera capture to survive activity recreation
     val cameraUri = savedStateHandle.getStateFlow<android.net.Uri?>("camera_uri", null)
 
@@ -88,9 +91,14 @@ class RentalViewModel(application: Application, private val savedStateHandle: Sa
     }
 
     fun refreshAll() {
-        fetchStats()
-        fetchListings()
-        fetchBookings()
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            fetchStats()
+            fetchListings()
+            fetchBookings()
+            kotlinx.coroutines.delay(500) // Visual feedback
+            _isRefreshing.value = false
+        }
     }
 
     fun updateConnectionSettings(newBaseUrl: String, newToken: String) {
